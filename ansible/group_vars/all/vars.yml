@@ -1,0 +1,52 @@
+---
+# System identity and localization
+server_hostname: g580
+admin_user: konzi
+server_timezone: Europe/Warsaw
+
+# Storage layout on 250 GB SSD (installer sets root '/' LV to 60G)
+lvm_vg_name: ubuntu-vg
+lvm_volumes:
+  - name: lv_docker
+    size: 50G
+    fstype: ext4
+    mount_point: /var/lib/docker
+    opts: defaults,noatime
+  - name: lv_srv
+    size: 60G
+    fstype: ext4
+    mount_point: /srv
+    opts: defaults,noatime
+
+# Laptop-as-server tuning (8 GB RAM, closed lid, Wi-Fi stability)
+zram_size_expression: "min(ram / 2, 4096)"
+zram_compression_algorithm: zstd
+console_blank_seconds: 60
+disable_wifi_power_save: true
+
+# Network and Zero Trust SSH/UFW policy
+ssh_port: 22
+tailscale_interface: tailscale0
+
+# Docker CE engine settings
+docker_apt_arch: amd64
+docker_log_max_size: "10m"
+docker_log_max_file: "3"
+docker_live_restore: true
+
+# Off-site encrypted backups (Restic + rclone -> Google Drive)
+backup_enabled: true
+backup_rclone_remote_name: gdrive
+backup_rclone_remote_path: homelab-backups/g580/restic
+backup_paths:
+  - /srv
+  - /etc
+backup_exclude_patterns:
+  - "*.tmp"
+  - "*.log"
+  - "/srv/**/cache/**"
+backup_schedule: "*-*-* 03:30:00"
+backup_retention:
+  keep_daily: 7
+  keep_weekly: 4
+  keep_monthly: 3

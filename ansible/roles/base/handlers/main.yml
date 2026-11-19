@@ -1,0 +1,22 @@
+---
+- name: Restart systemd-logind
+  ansible.builtin.systemd_service:
+    name: systemd-logind
+    state: restarted
+
+- name: Update grub
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/update-grub
+  changed_when: true
+
+- name: Reload systemd daemon for zram
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  listen: Reload systemd and start zram
+
+- name: Start zram setup service
+  ansible.builtin.systemd_service:
+    name: systemd-zram-setup@zram0.service
+    state: started
+  listen: Reload systemd and start zram

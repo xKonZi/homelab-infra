@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Managed by Ansible
+set -euo pipefail
+
+set -a
+# shellcheck source=/dev/null
+source /etc/restic/env
+set +a
+
+BACKUP_PATHS=(
+{% for path in backup_paths %}
+  "{{ path }}"
+{% endfor %}
+)
+
+/usr/bin/restic backup \
+  --host "{{ server_hostname }}" \
+  --one-file-system \
+  --exclude-file=/etc/restic/excludes \
+  "${BACKUP_PATHS[@]}"
+
+/usr/bin/restic forget \
+  --prune \
+  --host "{{ server_hostname }}" \
+  --keep-daily "{{ backup_retention.keep_daily }}" \
+  --keep-weekly "{{ backup_retention.keep_weekly }}" \
+  --keep-monthly "{{ backup_retention.keep_monthly }}"
+
+/usr/bin/restic check --read-data-subset=5%

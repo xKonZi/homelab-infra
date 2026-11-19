@@ -1,0 +1,26 @@
+---
+- name: Phase 1 — Bootstrap Lenovo G580 over LAN before enabling Zero Trust firewall
+  hosts: prod
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: base
+      tags:
+        - base
+    - role: storage
+      tags:
+        - storage
+    - role: tailscale
+      tags:
+        - tailscale
+
+  post_tasks:
+    - name: Print next manual step to bring Tailscale online
+      ansible.builtin.debug:
+        msg: >-
+          Bootstrap complete. Next: SSH into g580 and run 'sudo tailscale up',
+          authorize the node in your browser, verify 'ssh g580' over Tailscale,
+          prepare secrets.yml + rclone.conf, and then run 'ansible-playbook playbooks/site.yml -K'.
+      tags:
+        - always

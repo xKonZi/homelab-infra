@@ -1,0 +1,55 @@
+---
+- name: Verify target LVM volume group exists
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/vgs
+      - --noheadings
+      - "{{ lvm_vg_name }}"
+  changed_when: false
+  check_mode: false
+
+- name: Create dedicated logical volumes from remaining VG free space
+  community.general.lvol:
+    vg: "{{ lvm_vg_name }}"
+    lv: "{{ item.name }}"
+    size: "{{ item.size }}"
+    state: present
+  loop: "{{ lvm_volumes }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.size }})"
+
+- name: Create filesystems on dedicated logical volumes
+  community.general.filesystem:
+    fstype: "{{ item.fstype }}"
+    dev: "/dev/{{ lvm_vg_name }}/{{ item.name }}"
+  loop: "{{ lvm_volumes }}"
+  loop_control:
+    label: "{{ item.name }} -> {{ item.fstype }}"
+
+- name: Ensure mount point directories exist
+  ansible.builtin.file:
+    path: "{{ item.mount_point }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ lvm_volumes }}"
+  loop_control:
+    label: "{{ item.mount_point }}"
+
+- name: Mount dedicated logical volumes persistently via fstab
+  ansible.posix.mount:
+    path: "{{ item.mount_point }}"
+    src: "/dev/{{ lvm_vg_name }}/{{ item.name }}"
+    fstype: "{{ item.fstype }}"
+    opts: "{{ item.opts }}"
+    state: mounted
+  loop: "{{ lvm_volumes }}"
+  loop_control:
+    label: "{{ item.mount_point }}"
+
+- name: Ensure /srv is owned by admin user for application data
+  ansible.builtin.file:
+    path: /srv
+    state: directory
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0755"

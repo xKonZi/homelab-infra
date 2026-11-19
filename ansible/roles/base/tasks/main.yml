@@ -1,0 +1,157 @@
+---
+- name: Set system hostname
+  ansible.builtin.hostname:
+    name: "{{ server_hostname }}"
+
+- name: Set system timezone
+  community.general.timezone:
+    name: "{{ server_timezone }}"
+
+- name: Install baseline administration and hardware packages
+  ansible.builtin.apt:
+    name:
+      - apt-listchanges
+      - ca-certificates
+      - curl
+      - git
+      - gnupg
+      - htop
+      - iw
+      - lm-sensors
+      - lvm2
+      - ncdu
+      - systemd-zram-generator
+      - thermald
+      - tmux
+      - unattended-upgrades
+      - vim
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Ensure thermald service is enabled and running
+  ansible.builtin.systemd_service:
+    name: thermald
+    enabled: true
+    state: started
+
+- name: Ensure systemd logind drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/logind.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure systemd-logind to ignore closed laptop lid
+  ansible.builtin.template:
+    src: lid.conf.j2
+    dest: /etc/systemd/logind.conf.d/lid.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart systemd-logind
+
+- name: Ensure GRUB drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/default/grub.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure console blanking timeout in GRUB
+  ansible.builtin.copy:
+    dest: /etc/default/grub.d/60-consoleblank.cfg
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible
+      GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT consoleblank={{ console_blank_seconds }}"
+  notify: Update grub
+
+- name: Disable Wi-Fi power saving persistently for iwlwifi driver
+  ansible.builtin.copy:
+    dest: /etc/modprobe.d/iwlwifi-nopowersave.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible
+      options iwlwifi power_save=0
+  when: disable_wifi_power_save | bool
+
+- name: Disable Wi-Fi power saving via udev on wireless interfaces
+  ansible.builtin.copy:
+    dest: /etc/udev/rules.d/70-wifi-powersave.rules
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible
+      ACTION=="add", SUBSYSTEM=="net", KERNEL=="wl*", RUN+="/usr/sbin/iw dev $name set power_save off"
+  when: disable_wifi_power_save | bool
+
+- name: Check current Wi-Fi power_save state on active wireless interfaces
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/iw
+      - dev
+      - "{{ item }}"
+      - get
+      - power_save
+  loop: "{{ ansible_facts['interfaces'] | select('match', '^wl') | list }}"
+  register: base_wifi_powersave_state
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when: disable_wifi_power_save | bool
+
+- name: Disable Wi-Fi power_save immediately on active wireless interfaces
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/iw
+      - dev
+      - "{{ item.item }}"
+      - set
+      - power_save
+      - "off"
+  loop: "{{ base_wifi_powersave_state.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when:
+    - disable_wifi_power_save | bool
+    - "'Power save: on' in (item.stdout | default(''))"
+  changed_when: true
+
+- name: Configure zram swap generator
+  ansible.builtin.template:
+    src: zram-generator.conf.j2
+    dest: /etc/systemd/zram-generator.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd and start zram
+
+- name: Configure APT periodic unattended upgrades schedule
+  ansible.builtin.template:
+    src: 20auto-upgrades.j2
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Configure local unattended-upgrades policy without auto-reboot
+  ansible.builtin.template:
+    src: 52unattended-upgrades-local.j2
+    dest: /etc/apt/apt.conf.d/52unattended-upgrades-local
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Ensure unattended-upgrades service is enabled and running
+  ansible.builtin.systemd_service:
+    name: unattended-upgrades
+    enabled: true
+    state: started

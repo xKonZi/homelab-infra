@@ -1,0 +1,76 @@
+---
+- name: Check authorized_keys exists for admin user before disabling passwords
+  ansible.builtin.stat:
+    path: "/home/{{ admin_user }}/.ssh/authorized_keys"
+  register: security_authorized_keys_stat
+  check_mode: false
+
+- name: Abort if admin user has no authorized SSH keys
+  ansible.builtin.assert:
+    that:
+      - security_authorized_keys_stat.stat.exists
+      - security_authorized_keys_stat.stat.size > 0
+    fail_msg: >-
+      Refusing to disable SSH password authentication:
+      /home/{{ admin_user }}/.ssh/authorized_keys is missing or empty.
+
+- name: Ensure sshd_config.d drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy hardened OpenSSH drop-in configuration (first-match-wins)
+  ansible.builtin.template:
+    src: 00-hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/00-hardening.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Validate and reload ssh
+
+- name: Validate OpenSSH configuration syntax
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/sshd
+      - -t
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Ensure UFW firewall package is installed
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+
+- name: Allow SSH strictly over Tailscale interface
+  community.general.ufw:
+    rule: allow
+    interface: "{{ tailscale_interface }}"
+    direction: in
+    port: "{{ ssh_port | string }}"
+    proto: tcp
+    comment: SSH over Tailscale only
+
+- name: Set UFW default outgoing policy to allow
+  community.general.ufw:
+    direction: outgoing
+    policy: allow
+
+- name: Set UFW default incoming policy to deny
+  community.general.ufw:
+    direction: incoming
+    policy: deny
+
+- name: Enable UFW firewall with logging
+  community.general.ufw:
+    state: enabled
+    logging: "on"
+
+- name: Remove any broad SSH allow rule not bound to Tailscale interface
+  community.general.ufw:
+    rule: allow
+    port: "{{ ssh_port | string }}"
+    proto: tcp
+    delete: true

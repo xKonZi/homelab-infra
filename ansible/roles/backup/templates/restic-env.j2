@@ -1,0 +1,4 @@
+# Managed by Ansible
+RESTIC_REPOSITORY=rclone:{{ backup_rclone_remote_name }}:{{ backup_rclone_remote_path }}
+RESTIC_PASSWORD_FILE=/etc/restic/password
+RCLONE_CONFIG=/root/.config/rclone/rclone.conf

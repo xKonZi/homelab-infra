@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Managed by Ansible
+set -euo pipefail
+
+set -a
+# shellcheck source=/dev/null
+source /etc/restic/env
+set +a
+
+exec /usr/bin/restic "$@"

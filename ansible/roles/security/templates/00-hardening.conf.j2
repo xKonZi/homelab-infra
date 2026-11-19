@@ -1,0 +1,13 @@
+# Managed by Ansible
+# Prefix 00- is required because OpenSSH uses first-match-wins and Ubuntu 24.04
+# ships 50-cloud-init.conf.
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+AuthenticationMethods publickey
+PermitEmptyPasswords no
+X11Forwarding no
+MaxAuthTries 3
+LoginGraceTime 30
+AllowUsers {{ admin_user }}

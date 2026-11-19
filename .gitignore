@@ -1,0 +1,27 @@
+# Local Ansible inventory, secrets, and rclone OAuth credentials
+ansible/inventory/hosts.yml
+ansible/group_vars/all/secrets.yml
+ansible/files/rclone.conf
+
+# Sensitive artifacts and environment files
+*.secret
+*.key
+*.pem
+.env
+.env.*
+!.env.example
+
+# Ansible runtime artifacts
+*.retry
+.ansible/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# OS / Editor files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~

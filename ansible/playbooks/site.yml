@@ -1,0 +1,37 @@
+---
+- name: Phase 2 & day-2 maintenance — Enforce full homelab state over Tailscale
+  hosts: prod
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Ensure Tailscale interface is up with an IPv4 address before hardening
+      ansible.builtin.assert:
+        that:
+          - tailscale_interface in ansible_facts['interfaces']
+          - ((ansible_facts.get(tailscale_interface, {})).get('ipv4', {})).get('address') is defined
+        fail_msg: >-
+          Tailscale interface '{{ tailscale_interface }}' must be up before applying
+          security hardening — run playbooks/bootstrap.yml and 'sudo tailscale up' first.
+      tags:
+        - always
+
+  roles:
+    - role: base
+      tags:
+        - base
+    - role: storage
+      tags:
+        - storage
+    - role: tailscale
+      tags:
+        - tailscale
+    - role: security
+      tags:
+        - security
+    - role: docker
+      tags:
+        - docker
+    - role: backup
+      tags:
+        - backup

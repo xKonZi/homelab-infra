@@ -1,0 +1,152 @@
+---
+- name: Configure Restic + rclone off-site backups
+  when: backup_enabled | bool
+  block:
+    - name: Validate backup secrets are configured
+      ansible.builtin.assert:
+        that:
+          - restic_repository_password is defined
+          - restic_repository_password | string | length > 0
+          - restic_repository_password != "CHANGE_ME_STRONG_RANDOM_PASSPHRASE"
+          - rclone_local_config_path is defined
+        fail_msg: >-
+          Backup secrets are missing or still use the placeholder password.
+          Copy ansible/group_vars/all/secrets.yml.example to secrets.yml and set
+          restic_repository_password (or pass --skip-tags backup).
+
+    - name: Check local rclone configuration file exists on control node
+      ansible.builtin.stat:
+        path: "{{ rclone_local_config_path }}"
+      delegate_to: localhost
+      become: false
+      check_mode: false
+      register: backup_rclone_local_stat
+
+    - name: Abort if local rclone.conf is missing
+      ansible.builtin.assert:
+        that:
+          - backup_rclone_local_stat.stat.exists
+          - backup_rclone_local_stat.stat.size > 0
+        fail_msg: >-
+          Local rclone configuration not found at '{{ rclone_local_config_path }}'.
+          Generate it on the control node with 'rclone authorize "drive"' and save
+          a [{{ backup_rclone_remote_name }}] section there (or pass --skip-tags backup).
+
+    - name: Install Restic and rclone packages
+      ansible.builtin.apt:
+        name:
+          - restic
+          - rclone
+        state: present
+
+    - name: Ensure /etc/restic directory exists
+      ansible.builtin.file:
+        path: /etc/restic
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Ensure /root/.config/rclone directory exists
+      ansible.builtin.file:
+        path: /root/.config/rclone
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Deploy rclone configuration for root
+      ansible.builtin.copy:
+        src: "{{ rclone_local_config_path }}"
+        dest: /root/.config/rclone/rclone.conf
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Write Restic repository password file
+      ansible.builtin.copy:
+        content: "{{ restic_repository_password }}\n"
+        dest: /etc/restic/password
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Deploy Restic environment configuration
+      ansible.builtin.template:
+        src: restic-env.j2
+        dest: /etc/restic/env
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Deploy Restic exclude patterns
+      ansible.builtin.template:
+        src: restic-excludes.j2
+        dest: /etc/restic/excludes
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Deploy Restic environment wrapper script
+      ansible.builtin.template:
+        src: restic-env-wrapper.sh.j2
+        dest: /usr/local/sbin/restic-env
+        owner: root
+        group: root
+        mode: "0750"
+
+    - name: Deploy homelab backup runner script
+      ansible.builtin.template:
+        src: homelab-backup.sh.j2
+        dest: /usr/local/sbin/homelab-backup
+        owner: root
+        group: root
+        mode: "0750"
+
+    - name: Check if Restic repository is already initialized
+      ansible.builtin.command:
+        argv:
+          - /usr/local/sbin/restic-env
+          - cat
+          - config
+      register: backup_restic_repo_check
+      failed_when: false
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Initialize Restic repository on Google Drive if missing
+      ansible.builtin.command:
+        argv:
+          - /usr/local/sbin/restic-env
+          - init
+      when:
+        - not ansible_check_mode
+        - (backup_restic_repo_check.rc | default(0)) != 0
+      changed_when: true
+
+    - name: Deploy systemd service unit for Restic backup
+      ansible.builtin.template:
+        src: restic-backup.service.j2
+        dest: /etc/systemd/system/restic-backup.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload systemd
+
+    - name: Deploy systemd timer unit for Restic backup
+      ansible.builtin.template:
+        src: restic-backup.timer.j2
+        dest: /etc/systemd/system/restic-backup.timer
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload systemd
+
+    - name: Enable and start Restic backup systemd timer
+      ansible.builtin.systemd_service:
+        name: restic-backup.timer
+        daemon_reload: true
+        enabled: true
+        state: started
