@@ -20,6 +20,7 @@
       - lm-sensors
       - lvm2
       - ncdu
+      - python3-debian
       - systemd-zram-generator
       - thermald
       - tmux

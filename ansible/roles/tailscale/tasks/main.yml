@@ -16,11 +16,17 @@
     mode: "0644"
 
 - name: Configure official Tailscale APT repository
-  ansible.builtin.apt_repository:
-    repo: >-
-      deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg]
-      https://pkgs.tailscale.com/stable/ubuntu noble main
-    filename: tailscale
+  ansible.builtin.deb822_repository:
+    name: tailscale
+    types:
+      - deb
+    uris:
+      - https://pkgs.tailscale.com/stable/ubuntu
+    suites:
+      - noble
+    components:
+      - main
+    signed_by: /usr/share/keyrings/tailscale-archive-keyring.gpg
     state: present
 
 - name: Install Tailscale client

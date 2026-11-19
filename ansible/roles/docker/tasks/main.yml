@@ -28,11 +28,19 @@
     mode: "0644"
 
 - name: Configure official Docker CE APT repository
-  ansible.builtin.apt_repository:
-    repo: >-
-      deb [arch={{ docker_apt_arch }} signed-by=/usr/share/keyrings/docker.asc]
-      https://download.docker.com/linux/ubuntu noble stable
-    filename: docker
+  ansible.builtin.deb822_repository:
+    name: docker
+    types:
+      - deb
+    uris:
+      - https://download.docker.com/linux/ubuntu
+    suites:
+      - noble
+    components:
+      - stable
+    architectures:
+      - "{{ docker_apt_arch }}"
+    signed_by: /usr/share/keyrings/docker.asc
     state: present
 
 - name: Install Docker CE engine and Compose plugin
