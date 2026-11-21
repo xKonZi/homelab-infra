@@ -29,8 +29,9 @@
           - backup_rclone_local_stat.stat.size > 0
         fail_msg: >-
           Local rclone configuration not found at '{{ rclone_local_config_path }}'.
-          Generate it on the control node with 'rclone authorize "drive"' and save
-          a [{{ backup_rclone_remote_name }}] section there (or pass --skip-tags backup).
+          Generate it on the control node with 'rclone config --config ansible/files/rclone.conf'
+          using a personal Google Cloud OAuth Desktop app (In production, scope drive.file)
+          with a [{{ backup_rclone_remote_name }}] section (or pass --skip-tags backup).
 
     - name: Install Restic and rclone packages
       ansible.builtin.apt:
@@ -55,6 +56,16 @@
         group: root
         mode: "0700"
 
+    - name: Ensure /var/cache/restic directory exists
+      ansible.builtin.file:
+        path: /var/cache/restic
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    # rclone refreshes short-lived OAuth access tokens in-place on the host;
+    # keep force=false on day-2 runs (use -e backup_rclone_force_update=true to rotate).
     - name: Deploy rclone configuration for root
       ansible.builtin.copy:
         src: "{{ rclone_local_config_path }}"
@@ -62,6 +73,7 @@
         owner: root
         group: root
         mode: "0600"
+        force: "{{ backup_rclone_force_update | default(false) | bool }}"
       no_log: true
 
     - name: Write Restic repository password file

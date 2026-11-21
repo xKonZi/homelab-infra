@@ -36,7 +36,7 @@ sudo ufw status verbose
 
 - **Oczekiwany wynik na G580:**
   - `Status: active`
-  - `Default: deny (incoming), allow (outgoing), disabled (routed)`
+  - `Default: deny (incoming), allow (outgoing), deny (routed)` (lub `disabled (routed)`)
   - Wyłącznie reguła `22/tcp on tailscale0 -> ALLOW IN`.
 
 ---
@@ -80,13 +80,14 @@ lsblk
 sudo lvs
 sudo vgs
 df -h / /var/lib/docker /srv
+ls -ld /srv
 ```
 
 - **Oczekiwany wynik:**
   - `/` ~ `60G` (`ubuntu-vg/ubuntu-lv`)
   - `/var/lib/docker` ~ `50G` (`ubuntu-vg/lv_docker`)
   - `/srv` ~ `60G` (`ubuntu-vg/lv_srv`, właściciel `konzi:konzi`)
-  - W `ubuntu-vg` pozostaje kilkadziesiąt GB nieprzydzielonej rezerwy (`VFree`).
+  - W `ubuntu-vg` pozostaje ~`50G` nieprzydzielonej rezerwy (`VFree`).
 
 ---
 
@@ -122,9 +123,10 @@ apt-config dump APT::Periodic Unattended-Upgrade::Automatic-Reboot
 
 ## 8. Docker CE i rotacja logów
 
-Na **G580** (jako `konzi`, bez `sudo`):
+Na **G580** (w **nowej sesji SSH**, aby aktywowała się grupa `docker` przypisana w `site.yml` — jako `konzi`, bez `sudo`):
 
 ```bash
+id
 docker --version
 docker compose version
 docker info --format 'Logging={{.LoggingDriver}} LiveRestore={{.LiveRestoreEnabled}}'
@@ -132,11 +134,11 @@ docker info --format 'Logging={{.LoggingDriver}} LiveRestore={{.LiveRestoreEnabl
 
 - **Oczekiwany wynik:** `Logging=json-file LiveRestore=true`, brak błędu uprawnień grupy `docker`.
 
-Szybki test izolacji sieciowej kontenera (bindowanie wyłącznie na `127.0.0.1`):
+Szybki test izolacji sieciowej kontenera (bindowanie wyłącznie na `127.0.0.1`; krótkie `sleep 2` daje `nginx` czas na start zanim uderzy `curl`):
 
 ```bash
 docker run --rm -d --name w0-nginx-test -p 127.0.0.1:18080:80 nginx:alpine
-curl -I http://127.0.0.1:18080
+sleep 2 && curl -I http://127.0.0.1:18080
 docker stop w0-nginx-test
 ```
 
@@ -159,11 +161,11 @@ Na **G580** przetestuj pełny cykl zapisu i odzyskania danych przed pojawieniem 
    ```bash
    sudo /usr/local/sbin/restic-env snapshots
    ```
-4. Usuń plik lokalny i odtwórz go z repozytorium Restic do `/tmp/restore-test`:
+4. Usuń plik lokalny i odtwórz go z repozytorium Restic do `/tmp/restore-test` (`restic restore` zakłada katalog docelowy z uprawnieniami `0700 root:root`, dlatego odczyt pliku wymaga `sudo cat`):
    ```bash
    rm /srv/backup-test.txt
    sudo /usr/local/sbin/restic-env restore latest --target /tmp/restore-test --include /srv/backup-test.txt
-   cat /tmp/restore-test/srv/backup-test.txt
+   sudo cat /tmp/restore-test/srv/backup-test.txt
    ```
 5. Posprzątaj pliki testowe i sprawdź harmonogram `systemd timer`:
    ```bash
@@ -171,4 +173,4 @@ Na **G580** przetestuj pełny cykl zapisu i odzyskania danych przed pojawieniem 
    systemctl list-timers restic-backup.timer
    ```
 
-- **Oczekiwany wynik:** odtworzony plik zawiera dokładnie wpisany ciąg znaków, a `restic-backup.timer` ma zaplanowane kolejne uruchomienie o `03:30`.
+- **Oczekiwany wynik:** odtworzony plik zawiera dokładnie wpisany ciąg znaków, a `restic-backup.timer` ma zaplanowane kolejne uruchomienie w oknie `03:30–03:45` (`RandomizedDelaySec=15m`).

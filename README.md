@@ -19,7 +19,7 @@ Projekt stanowi fundament infrastruktury **Etapu W0** pod lekkie usługi produkc
 | Obszar | Rozwiązanie |
 | :--- | :--- |
 | **System bazowy** | Ubuntu Server 24.04 LTS (`g580`, użytkownik `konzi`, strefa `Europe/Warsaw`) |
-| **Dyski (SSD 250 GB)** | LVM bez LUKS (`ubuntu-vg`): `60G` `/` (instalator), `50G` `/var/lib/docker`, `60G` `/srv`, ~`59G` rezerwy w VG |
+| **Dyski (SSD 250 GB)** | LVM bez LUKS (`ubuntu-vg`): `60G` `/` (instalator), `50G` `/var/lib/docker`, `60G` `/srv`, ~`50G` rezerwy w VG |
 | **Laptop jako serwer** | Zamknięta klapa ignorowana (`systemd-logind`), `consoleblank=60`, `iwlwifi power_save=0`, `thermald`, `zram` (`min(ram / 2, 4096)`, `zstd`) |
 | **Sieć i hardening** | **Zero Trust po Wi-Fi:** UFW `deny incoming` w LAN, utwardzone OpenSSH (`00-hardening.conf`, tylko klucze, bez roota) wyłącznie na `tailscale0` |
 | **Aktualizacje** | `unattended-upgrades` dla łatek bezpieczeństwa, **bez** automatycznego rebootu |
@@ -69,13 +69,13 @@ homelab-infra/
 2. Na stacji roboczej (Arch PC) przygotuj lokalne pliki nieśledzone przez Git na bazie szablonów `.example`:
    - `ansible/inventory/hosts.yml`
    - `ansible/inventory/group_vars/all/secrets.yml`
-   - `ansible/files/rclone.conf` (token OAuth dla Google Drive)
+   - `ansible/files/rclone.conf` (token OAuth dla Google Drive z własnym klientem `Desktop app` z Google Cloud i zakresem `drive.file`)
 3. **Faza 1 (po tymczasowym IP w LAN):** uruchom `bootstrap.yml`, aby skonfigurować system bazowy, wolumeny LVM i zainstalować Tailscale:
    ```bash
    cd ansible
    ansible-playbook playbooks/bootstrap.yml -e ansible_host=<LAN_IP> -K
    ```
-4. **Spiecie tunelu:** zaloguj się na G580, uruchom `sudo tailscale up`, autoryzuj węzeł i zweryfikuj `ssh g580` z Arch PC.
+4. **Spięcie tunelu:** zaloguj się na G580, uruchom `sudo tailscale up`, autoryzuj węzeł i zweryfikuj `ssh g580` z Arch PC.
 5. **Faza 2 (wyłącznie po Tailscale):** uruchom pełny, idempotentny playbook `site.yml` (utwardza SSH/UFW, instaluje Docker CE i konfiguruje backupy Restic):
    ```bash
    ansible-playbook playbooks/site.yml -K

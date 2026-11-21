@@ -26,15 +26,8 @@
   loop_control:
     label: "{{ item.name }} -> {{ item.fstype }}"
 
-- name: Ensure mount point directories exist
-  ansible.builtin.file:
-    path: "{{ item.mount_point }}"
-    state: directory
-    mode: "0755"
-  loop: "{{ lvm_volumes }}"
-  loop_control:
-    label: "{{ item.mount_point }}"
-
+# ansible.posix.mount (state: mounted) creates missing mount points automatically
+# without clobbering service-managed modes (e.g. dockerd setting 0710 on /var/lib/docker).
 - name: Mount dedicated logical volumes persistently via fstab
   ansible.posix.mount:
     path: "{{ item.mount_point }}"

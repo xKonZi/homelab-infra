@@ -38,6 +38,9 @@ docker_live_restore: true
 backup_enabled: true
 backup_rclone_remote_name: gdrive
 backup_rclone_remote_path: homelab-backups/g580/restic
+# Keep false on day-2 runs so Ansible does not overwrite rclone's rotated OAuth access tokens.
+# Override with -e backup_rclone_force_update=true when intentionally rotating credentials.
+backup_rclone_force_update: false
 backup_paths:
   - /srv
   - /etc
