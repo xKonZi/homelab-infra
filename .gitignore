@@ -1,6 +1,6 @@
 # Local Ansible inventory, secrets, and rclone OAuth credentials
 ansible/inventory/hosts.yml
-ansible/group_vars/all/secrets.yml
+ansible/inventory/group_vars/all/secrets.yml
 ansible/files/rclone.conf
 
 # Sensitive artifacts and environment files

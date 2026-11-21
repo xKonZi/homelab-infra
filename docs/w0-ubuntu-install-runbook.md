@@ -101,7 +101,7 @@ Wszystkie polecenia wykonujesz z katalogu `~/projects/homelab-infra/ansible` na 
    ```
 4. **Przygotowanie backupów przed Fazą 2:**
    - Wygeneruj token OAuth Google Drive na Arch PC (`rclone authorize "drive"`) i zapisz plik `ansible/files/rclone.conf` z sekcją `[gdrive]`.
-   - Utwórz `ansible/group_vars/all/secrets.yml` z `secrets.yml.example` i wstaw wygenerowane silne hasło do Restic (`openssl rand -base64 32` — zapisz kopię w menedżerze haseł!).
+   - Utwórz `ansible/inventory/group_vars/all/secrets.yml` z `secrets.yml.example` i wstaw wygenerowane silne hasło do Restic (`openssl rand -base64 32` — zapisz kopię w menedżerze haseł!).
 5. **Faza 2 — `site.yml` (już wyłącznie po Tailscale):**
    ```bash
    ansible-playbook playbooks/site.yml --check --diff -K

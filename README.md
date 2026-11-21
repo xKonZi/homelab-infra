@@ -43,10 +43,10 @@ homelab-infra/
 │   ├── requirements.yml
 │   ├── files/.gitkeep                   # Miejsce na lokalny, ignorowany rclone.conf
 │   ├── inventory/
-│   │   └── hosts.yml.example
-│   ├── group_vars/all/
-│   │   ├── vars.yml
-│   │   └── secrets.yml.example
+│   │   ├── hosts.yml.example
+│   │   └── group_vars/all/
+│   │       ├── vars.yml
+│   │       └── secrets.yml.example
 │   ├── playbooks/
 │   │   ├── bootstrap.yml                # Faza 1 (po LAN): base + storage + tailscale
 │   │   └── site.yml                     # Faza 2 i utrzymanie (po Tailscale): pełny stan + hardening + Docker + backup
@@ -68,7 +68,7 @@ homelab-infra/
 1. Zainstaluj bazowy system na Lenovo G580 zgodnie z [docs/w0-ubuntu-install-runbook.md](docs/w0-ubuntu-install-runbook.md).
 2. Na stacji roboczej (Arch PC) przygotuj lokalne pliki nieśledzone przez Git na bazie szablonów `.example`:
    - `ansible/inventory/hosts.yml`
-   - `ansible/group_vars/all/secrets.yml`
+   - `ansible/inventory/group_vars/all/secrets.yml`
    - `ansible/files/rclone.conf` (token OAuth dla Google Drive)
 3. **Faza 1 (po tymczasowym IP w LAN):** uruchom `bootstrap.yml`, aby skonfigurować system bazowy, wolumeny LVM i zainstalować Tailscale:
    ```bash

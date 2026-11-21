@@ -11,7 +11,7 @@
           - rclone_local_config_path is defined
         fail_msg: >-
           Backup secrets are missing or still use the placeholder password.
-          Copy ansible/group_vars/all/secrets.yml.example to secrets.yml and set
+          Copy ansible/inventory/group_vars/all/secrets.yml.example to secrets.yml and set
           restic_repository_password (or pass --skip-tags backup).
 
     - name: Check local rclone configuration file exists on control node
