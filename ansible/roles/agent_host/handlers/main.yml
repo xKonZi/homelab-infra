@@ -1,0 +1,15 @@
+---
+- name: Reload and restart antigravity hub
+  ansible.builtin.systemd_service:
+    name: antigravity-hub.service
+    scope: user
+    daemon_reload: true
+    state: restarted
+  become: false
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['getent_passwd'][admin_user][1] }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_facts['getent_passwd'][admin_user][1] }}/bus"
+  when:
+    - agent_host_enabled | bool
+    - agent_host_hub_service_enabled | bool
+    - (agent_host_hub_binaries.matched | default(0) | int) > 0

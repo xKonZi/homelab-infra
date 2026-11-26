@@ -27,6 +27,7 @@ disable_wifi_power_save: true
 # Network and Zero Trust SSH/UFW policy
 ssh_port: 22
 tailscale_interface: tailscale0
+ssh_allow_tcp_forwarding: "local"
 
 # Docker CE engine settings
 docker_apt_arch: amd64
@@ -44,12 +45,40 @@ backup_rclone_force_update: false
 backup_paths:
   - /srv
   - /etc
+  - "/home/{{ admin_user }}"
 backup_exclude_patterns:
   - "*.tmp"
   - "*.log"
   - "/srv/**/cache/**"
+  - "/home/{{ admin_user }}/.antigravity-hub-server"
+  - "/home/{{ admin_user }}/.cache"
+  - "/home/{{ admin_user }}/.npm"
+  - "/home/{{ admin_user }}/.local/share/Trash"
+  - "/home/{{ admin_user }}/.gemini/antigravity/daemon"
+  - "/home/{{ admin_user }}/.gemini/antigravity/browser_sandbox"
+  - "**/.venv"
+  - "**/node_modules"
+  - "**/__pycache__"
+  - "**/target/debug"
+  - "**/target/release"
 backup_schedule: "*-*-* 03:30:00"
 backup_retention:
   keep_daily: 7
   keep_weekly: 4
   keep_monthly: 3
+# Agent host & central workspace (Stage W1)
+agent_host_enabled: true
+agent_host_packages:
+  - gh
+  - jq
+  - nodejs
+  - pipx
+  - python3-venv
+  - ripgrep
+agent_host_workspace_dirs:
+  - projects
+  - ops
+  - life
+agent_host_hub_service_enabled: true
+agent_host_hub_memory_high: "2G"
+agent_host_hub_memory_max: "3G"

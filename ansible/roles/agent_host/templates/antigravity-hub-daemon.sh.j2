@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Managed by Ansible
+set -euo pipefail
+
+BIN_ROOT="${HOME}/.antigravity-hub-server/bin"
+LATEST_DIR="$(find "${BIN_ROOT}" -mindepth 1 -maxdepth 1 -type d -name '*-x64' | sort -V | tail -n 1)"
+
+if [[ -z "${LATEST_DIR}" || ! -x "${LATEST_DIR}/language_server" ]]; then
+  echo "antigravity-hub-daemon: language_server binary not found under ${BIN_ROOT}" >&2
+  exit 1
+fi
+
+DIR_NAME="$(basename "${LATEST_DIR}")"
+VERSION="${DIR_NAME%-x64}"
+
+export ANTIGRAVITY_SERVER_CSRF_TOKEN="${ANTIGRAVITY_SERVER_CSRF_TOKEN:-$(openssl rand -hex 24)}"
+
+exec "${LATEST_DIR}/language_server" \
+  --standalone \
+  --override_ide_name antigravity \
+  --subclient_type hub \
+  --override_ide_version "${VERSION}" \
+  --override_user_agent_name antigravity \
+  --https_server_port 0 \
+  --app_data_dir antigravity \
+  --api_server_url https://generativelanguage.googleapis.com \
+  --cloud_code_endpoint https://daily-cloudcode-pa.googleapis.com \
+  --enable_sidecars \
+  --persistent_mode \
+  --workspace_id agy-hub-ssh

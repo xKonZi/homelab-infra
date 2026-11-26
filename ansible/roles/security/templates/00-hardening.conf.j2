@@ -8,6 +8,7 @@ PubkeyAuthentication yes
 AuthenticationMethods publickey
 PermitEmptyPasswords no
 X11Forwarding no
+AllowTcpForwarding {{ ssh_allow_tcp_forwarding }}
 MaxAuthTries 3
 LoginGraceTime 30
 AllowUsers {{ admin_user }}

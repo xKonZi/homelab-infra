@@ -32,6 +32,9 @@
     - role: docker
       tags:
         - docker
+    - role: agent_host
+      tags:
+        - agent_host
     - role: backup
       tags:
         - backup

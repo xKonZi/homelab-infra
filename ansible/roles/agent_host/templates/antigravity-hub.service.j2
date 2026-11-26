@@ -1,0 +1,15 @@
+# Managed by Ansible
+[Unit]
+Description=Antigravity Hub Language Server (Remote Control & Sidecars)
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/antigravity-hub-daemon
+Restart=on-failure
+RestartSec=10
+MemoryHigh={{ agent_host_hub_memory_high }}
+MemoryMax={{ agent_host_hub_memory_max }}
+Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+[Install]
+WantedBy=default.target

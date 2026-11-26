@@ -1,0 +1,101 @@
+---
+- name: Configure agent host and central workspace environment
+  when: agent_host_enabled | bool
+  block:
+    - name: Install agent host development and runtime packages
+      ansible.builtin.apt:
+        name: "{{ agent_host_packages }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Check if systemd lingering is enabled for admin user
+      ansible.builtin.stat:
+        path: "/var/lib/systemd/linger/{{ admin_user }}"
+      register: agent_host_linger_stat
+      check_mode: false
+
+    - name: Enable systemd user lingering for admin user
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/loginctl
+          - enable-linger
+          - "{{ admin_user }}"
+      when: not agent_host_linger_stat.stat.exists
+      changed_when: true
+
+    - name: Ensure workspace directories exist for admin user
+      ansible.builtin.file:
+        path: "/home/{{ admin_user }}/{{ item }}"
+        state: directory
+        owner: "{{ admin_user }}"
+        group: "{{ admin_user }}"
+        mode: "0755"
+      loop: "{{ agent_host_workspace_dirs }}"
+
+    - name: Ensure local bin and user systemd directories exist with correct ownership
+      ansible.builtin.file:
+        path: "/home/{{ admin_user }}/{{ item }}"
+        state: directory
+        owner: "{{ admin_user }}"
+        group: "{{ admin_user }}"
+        mode: "0700"
+      loop:
+        - .local
+        - .local/bin
+        - .config
+        - .config/systemd
+        - .config/systemd/user
+
+    - name: Deploy Antigravity Hub daemon launcher wrapper
+      ansible.builtin.template:
+        src: antigravity-hub-daemon.sh.j2
+        dest: "/home/{{ admin_user }}/.local/bin/antigravity-hub-daemon"
+        owner: "{{ admin_user }}"
+        group: "{{ admin_user }}"
+        mode: "0700"
+      notify: Reload and restart antigravity hub
+
+    - name: Deploy Antigravity Hub user systemd service unit
+      ansible.builtin.template:
+        src: antigravity-hub.service.j2
+        dest: "/home/{{ admin_user }}/.config/systemd/user/antigravity-hub.service"
+        owner: "{{ admin_user }}"
+        group: "{{ admin_user }}"
+        mode: "0644"
+      notify: Reload and restart antigravity hub
+
+    - name: Lookup admin user UID for user systemd runtime directory
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ admin_user }}"
+      check_mode: false
+
+    - name: Check if Antigravity Hub server bin directory exists
+      ansible.builtin.stat:
+        path: "/home/{{ admin_user }}/.antigravity-hub-server/bin"
+      register: agent_host_hub_bin_dir_stat
+      check_mode: false
+
+    - name: Check if Antigravity Hub language_server binary is installed
+      ansible.builtin.find:
+        paths: "/home/{{ admin_user }}/.antigravity-hub-server/bin"
+        patterns: language_server
+        file_type: file
+        recurse: true
+      register: agent_host_hub_binaries
+      check_mode: false
+      when: agent_host_hub_bin_dir_stat.stat.exists
+
+    - name: Enable Antigravity Hub user systemd service (and start if binary is present)
+      ansible.builtin.systemd_service:
+        name: antigravity-hub.service
+        scope: user
+        daemon_reload: true
+        enabled: true
+        state: "{{ 'started' if (agent_host_hub_binaries.matched | default(0) | int > 0) else omit }}"
+      become: false
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_facts['getent_passwd'][admin_user][1] }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ ansible_facts['getent_passwd'][admin_user][1] }}/bus"
+      when: agent_host_hub_service_enabled | bool
