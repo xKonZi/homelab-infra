@@ -1,0 +1,2 @@
+# Managed by Ansible
+w {{ power_conservation_mode_path }} - - - - {{ '1' if (power_conservation_mode_enabled | bool) else '0' }}

@@ -1,0 +1,77 @@
+---
+- name: Configure Lenovo G580 battery UPS guard, conservation mode, and power-status CLI
+  when: power_enabled | bool
+  block:
+    - name: Check if Lenovo ideapad_acpi conservation_mode sysfs node exists
+      ansible.builtin.stat:
+        path: "{{ power_conservation_mode_path }}"
+      register: power_conservation_stat
+      check_mode: false
+
+    - name: Deploy systemd-tmpfiles rule for Lenovo battery conservation mode
+      ansible.builtin.template:
+        src: lenovo-conservation-mode.conf.j2
+        dest: /etc/tmpfiles.d/lenovo-conservation-mode.conf
+        owner: root
+        group: root
+        mode: "0644"
+      when: power_conservation_stat.stat.exists
+
+    - name: Read current Lenovo conservation_mode sysfs value
+      ansible.builtin.slurp:
+        src: "{{ power_conservation_mode_path }}"
+      register: power_conservation_current
+      check_mode: false
+      when: power_conservation_stat.stat.exists
+
+    - name: Apply Lenovo battery conservation mode via systemd-tmpfiles
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/systemd-tmpfiles
+          - --create
+          - /etc/tmpfiles.d/lenovo-conservation-mode.conf
+      when:
+        - power_conservation_stat.stat.exists
+        - (power_conservation_current.content | b64decode | trim) != ('1' if (power_conservation_mode_enabled | bool) else '0')
+      changed_when: true
+
+    - name: Deploy battery UPS safe-shutdown guard script
+      ansible.builtin.template:
+        src: battery-ups-guard.sh.j2
+        dest: /usr/local/sbin/battery-ups-guard
+        owner: root
+        group: root
+        mode: "0750"
+
+    - name: Deploy systemd service unit for battery UPS guard
+      ansible.builtin.template:
+        src: battery-ups-guard.service.j2
+        dest: /etc/systemd/system/battery-ups-guard.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload systemd
+
+    - name: Deploy systemd timer unit for battery UPS guard
+      ansible.builtin.template:
+        src: battery-ups-guard.timer.j2
+        dest: /etc/systemd/system/battery-ups-guard.timer
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart battery-ups-guard timer
+
+    - name: Enable and start battery UPS guard systemd timer
+      ansible.builtin.systemd_service:
+        name: battery-ups-guard.timer
+        daemon_reload: true
+        enabled: true
+        state: started
+
+    - name: Deploy power-status CLI inspection tool
+      ansible.builtin.template:
+        src: power-status.py.j2
+        dest: /usr/local/bin/power-status
+        owner: root
+        group: root
+        mode: "0755"

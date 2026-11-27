@@ -1,0 +1,11 @@
+# Managed by Ansible
+[Unit]
+Description=Periodic check of homelab battery UPS state
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec={{ power_ups_check_interval_seconds }}s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

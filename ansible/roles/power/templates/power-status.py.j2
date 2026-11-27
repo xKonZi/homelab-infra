@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""Read-only battery, UPS, and conservation mode status reporter for SSH."""
+
+import argparse
+from pathlib import Path
+import subprocess
+import sys
+
+AC_PATH = Path("/sys/class/power_supply/{{ power_ac_adapter_name }}/uevent")
+BAT_PATH = Path("/sys/class/power_supply/{{ power_battery_name }}/uevent")
+CONSERVATION_PATH = Path("{{ power_conservation_mode_path }}")
+UPS_TIMER_UNIT = "battery-ups-guard.timer"
+SHUTDOWN_THRESHOLD = {{ power_ups_shutdown_threshold_percent }}
+CHECK_INTERVAL = {{ power_ups_check_interval_seconds }}
+ENERGY_SCALE = {{ power_energy_scale_divisor }}
+# Lenovo G580 EC exposes 0xFFFF * 1000 as a sentinel when instantaneous power is unavailable.
+POWER_SENTINEL = 65535000
+# G580 EC stores charging power as a negative 16-bit two's complement value read as unsigned * 1000.
+POWER_INT16_MAX = 32767000
+POWER_UINT16_MOD = 65536000
+
+
+def parse_uevent(path: Path) -> dict[str, str]:
+    """Parse a sysfs uevent file into a key-value mapping."""
+    data: dict[str, str] = {}
+    if not path.is_file():
+        return data
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            data[key.strip()] = value.strip()
+    return data
+
+
+def read_int(mapping: dict[str, str], key: str) -> int | None:
+    """Safely extract an integer property from parsed uevent data."""
+    raw = mapping.get(key)
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def read_conservation_mode() -> str:
+    """Return human-readable conservation_mode status."""
+    if not CONSERVATION_PATH.is_file():
+        return "N/A (sysfs node not found)"
+    val = CONSERVATION_PATH.read_text(encoding="utf-8", errors="replace").strip()
+    if val == "1":
+        return "ON (charge limit active)"
+    if val == "0":
+        return "OFF (full charge allowed)"
+    return f"Unknown ({val})"
+
+
+def read_timer_status() -> str:
+    """Query systemd timer activation state without failing on errors."""
+    try:
+        res = subprocess.run(
+            ["systemctl", "is-active", UPS_TIMER_UNIT],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+        state = res.stdout.strip() or res.stderr.strip() or "unknown"
+        return state
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+
+
+def format_duration(hours: float) -> str:
+    """Format fractional hours as Xh Ym."""
+    total_minutes = max(0, int(round(hours * 60)))
+    hrs, mins = divmod(total_minutes, 60)
+    return f"{hrs}h {mins:02d}m"
+
+
+def compute_energy_wh(bat: dict[str, str]) -> tuple[float | None, float | None, float | None]:
+    """Return (now_wh, full_wh, design_wh) supporting ENERGY_* and fallback CHARGE_*."""
+    e_now = read_int(bat, "POWER_SUPPLY_ENERGY_NOW")
+    e_full = read_int(bat, "POWER_SUPPLY_ENERGY_FULL")
+    e_design = read_int(bat, "POWER_SUPPLY_ENERGY_FULL_DESIGN")
+    if e_now is not None and e_full is not None and e_design is not None:
+        return e_now / ENERGY_SCALE, e_full / ENERGY_SCALE, e_design / ENERGY_SCALE
+
+    c_now = read_int(bat, "POWER_SUPPLY_CHARGE_NOW")
+    c_full = read_int(bat, "POWER_SUPPLY_CHARGE_FULL")
+    c_design = read_int(bat, "POWER_SUPPLY_CHARGE_FULL_DESIGN")
+    v_design = read_int(bat, "POWER_SUPPLY_VOLTAGE_MIN_DESIGN")
+    if c_now is not None and c_full is not None and c_design is not None and v_design:
+        # Standard uAh * uV -> Wh (1e12)
+        factor = v_design / 1e12
+        return c_now * factor, c_full * factor, c_design * factor
+    return None, None, None
+
+
+def main() -> int:
+    """Print power, battery, health, and UPS guard status."""
+    parser = argparse.ArgumentParser(description="Show homelab battery and UPS status.")
+    parser.add_argument("--raw", action="store_true", help="Also print raw sysfs uevent values.")
+    args = parser.parse_args()
+
+    ac = parse_uevent(AC_PATH)
+    bat = parse_uevent(BAT_PATH)
+
+    ac_online = ac.get("POWER_SUPPLY_ONLINE")
+    ac_label = "Online" if ac_online == "1" else ("Offline" if ac_online == "0" else "Unknown")
+
+    print("=== {{ server_hostname }} Power & UPS Status ===")
+    print(f"AC Adapter ({{ power_ac_adapter_name }}):  {ac_label}")
+
+    present = bat.get("POWER_SUPPLY_PRESENT")
+    if not bat or present != "1":
+        print("Battery ({{ power_battery_name }}):     Not present")
+    else:
+        capacity = bat.get("POWER_SUPPLY_CAPACITY", "?")
+        status = bat.get("POWER_SUPPLY_STATUS", "Unknown")
+        cap_level = bat.get("POWER_SUPPLY_CAPACITY_LEVEL", "")
+        level_suffix = f", {cap_level}" if cap_level and cap_level != "Normal" else ""
+        print(f"Battery ({{ power_battery_name }}):     {capacity}% ({status}{level_suffix})")
+
+        v_now = read_int(bat, "POWER_SUPPLY_VOLTAGE_NOW")
+        v_min = read_int(bat, "POWER_SUPPLY_VOLTAGE_MIN_DESIGN")
+        if v_now is not None:
+            v_str = f"{v_now / 1e6:.2f} V"
+            if v_min is not None:
+                v_str += f" (min design: {v_min / 1e6:.2f} V)"
+            print(f"Voltage:            {v_str}")
+
+        e_now, e_full, e_design = compute_energy_wh(bat)
+        cycles = bat.get("POWER_SUPPLY_CYCLE_COUNT", "?")
+        if e_now is not None and e_full is not None and e_design is not None and e_design > 0:
+            health_pct = (e_full / e_design) * 100.0
+            print(f"Energy:             {e_now:.1f} / {e_full:.1f} Wh")
+            print(f"Health:             {health_pct:.1f}% (design: {e_design:.1f} Wh, cycles: {cycles})")
+
+        p_now = read_int(bat, "POWER_SUPPLY_POWER_NOW")
+        if p_now is None or p_now >= POWER_SENTINEL or p_now <= 0:
+            print("Power draw:         N/A (idle / EC sentinel)")
+        elif p_now > POWER_INT16_MAX:
+            watts = (POWER_UINT16_MOD - p_now) / ENERGY_SCALE
+            print(f"Power draw:         {watts:.1f} W (charging)")
+        else:
+            watts = p_now / ENERGY_SCALE
+            draw_line = f"{watts:.1f} W"
+            if status == "Discharging" and e_now is not None and e_full is not None and watts > 0:
+                rem_zero = format_duration(e_now / watts)
+                threshold_wh = e_full * (SHUTDOWN_THRESHOLD / 100.0)
+                if e_now > threshold_wh:
+                    rem_ups = format_duration((e_now - threshold_wh) / watts)
+                    draw_line += f" (est. {rem_ups} to {SHUTDOWN_THRESHOLD}% UPS / {rem_zero} to 0%)"
+                else:
+                    draw_line += f" (below {SHUTDOWN_THRESHOLD}% UPS threshold; {rem_zero} to 0%)"
+            print(f"Power draw:         {draw_line}")
+
+    print(f"Conservation mode:  {read_conservation_mode()}")
+    print(
+        f"UPS Guard:          {read_timer_status()} "
+        f"(safe poweroff at <= {SHUTDOWN_THRESHOLD}% on battery, check every {CHECK_INTERVAL}s)"
+    )
+
+    manufacturer = bat.get("POWER_SUPPLY_MANUFACTURER", "").strip()
+    model_name = bat.get("POWER_SUPPLY_MODEL_NAME", "").strip()
+    if manufacturer or model_name:
+        print(f"Model:              {' '.join(part for part in (manufacturer, model_name) if part)}")
+
+    if args.raw:
+        print("\n--- Raw uevent ({{ power_ac_adapter_name }}) ---")
+        for key, val in ac.items():
+            print(f"{key}={val}")
+        print("\n--- Raw uevent ({{ power_battery_name }}) ---")
+        for key, val in bat.items():
+            print(f"{key}={val}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

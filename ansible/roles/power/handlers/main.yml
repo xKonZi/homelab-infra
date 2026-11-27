@@ -1,0 +1,10 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Restart battery-ups-guard timer
+  ansible.builtin.systemd_service:
+    name: battery-ups-guard.timer
+    daemon_reload: true
+    state: restarted

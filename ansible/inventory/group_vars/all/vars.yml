@@ -82,3 +82,14 @@ agent_host_workspace_dirs:
 agent_host_hub_service_enabled: true
 agent_host_hub_memory_high: "2G"
 agent_host_hub_memory_max: "3G"
+
+# Battery UPS & power management (Lenovo G580)
+power_enabled: true
+power_battery_name: BAT1
+power_ac_adapter_name: ACAD
+power_conservation_mode_enabled: true
+power_conservation_mode_path: /sys/bus/platform/drivers/ideapad_acpi/VPC2004:00/conservation_mode
+power_ups_shutdown_threshold_percent: 20
+power_ups_check_interval_seconds: 60
+# G580 ACPI reports ENERGY_* in 10 uWh units (4884000 = 48.84 Wh) instead of standard 1 uWh.
+power_energy_scale_divisor: 100000

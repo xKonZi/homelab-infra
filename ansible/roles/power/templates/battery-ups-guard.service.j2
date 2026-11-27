@@ -1,0 +1,8 @@
+# Managed by Ansible
+[Unit]
+Description=Homelab battery UPS safe-shutdown guard
+
+[Service]
+Type=oneshot
+SyslogIdentifier=battery-ups-guard
+ExecStart=/usr/local/sbin/battery-ups-guard

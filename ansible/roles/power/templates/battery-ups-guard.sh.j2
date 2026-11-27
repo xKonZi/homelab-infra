@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Managed by Ansible
+set -euo pipefail
+
+DRY_RUN=false
+for arg in "$@"; do
+  case "${arg}" in
+    --dry-run|-n)
+      DRY_RUN=true
+      ;;
+    *)
+      echo "Usage: $0 [--dry-run|-n]" >&2
+      exit 2
+      ;;
+  esac
+done
+
+AC_PATH="/sys/class/power_supply/{{ power_ac_adapter_name }}"
+BATTERY_PATH="/sys/class/power_supply/{{ power_battery_name }}"
+THRESHOLD={{ power_ups_shutdown_threshold_percent }}
+
+log_msg() {
+  local priority="$1"
+  local message="$2"
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    echo "[DRY-RUN] [${priority}] ${message}"
+  else
+    echo "[${priority}] ${message}" >&2
+  fi
+}
+
+read_sysfs() {
+  local file_path="$1"
+  if [[ ! -r "${file_path}" ]]; then
+    return 1
+  fi
+  tr -d '\r\n' < "${file_path}"
+}
+
+if [[ ! -r "${AC_PATH}/online" ]] || [[ ! -r "${BATTERY_PATH}/present" ]] || [[ ! -r "${BATTERY_PATH}/status" ]] || [[ ! -r "${BATTERY_PATH}/capacity" ]]; then
+  log_msg "daemon.warning" "Required sysfs power_supply nodes missing (${AC_PATH}, ${BATTERY_PATH}); skipping check."
+  exit 0
+fi
+
+ac_online="$(read_sysfs "${AC_PATH}/online")"
+bat_present="$(read_sysfs "${BATTERY_PATH}/present")"
+bat_status="$(read_sysfs "${BATTERY_PATH}/status")"
+bat_capacity="$(read_sysfs "${BATTERY_PATH}/capacity")"
+
+if [[ "${bat_present}" != "1" ]]; then
+  log_msg "daemon.warning" "Battery {{ power_battery_name }} reports present=${bat_present}; skipping shutdown guard."
+  exit 0
+fi
+
+if [[ ! "${bat_capacity}" =~ ^[0-9]+$ ]]; then
+  log_msg "daemon.warning" "Invalid battery capacity reading '${bat_capacity}'; skipping shutdown guard."
+  exit 0
+fi
+
+if [[ "${ac_online}" == "0" ]] && [[ "${bat_status}" == "Discharging" ]]; then
+  if (( bat_capacity <= THRESHOLD )); then
+    if [[ "${DRY_RUN}" == "true" ]]; then
+      echo "[DRY-RUN] CRITICAL: AC offline, battery Discharging at ${bat_capacity}% (<= ${THRESHOLD}%). Would run systemctl poweroff."
+      exit 0
+    fi
+    echo "[daemon.crit] AC offline and battery at ${bat_capacity}% (<= ${THRESHOLD}%). Initiating safe shutdown." >&2
+    wall "CRITICAL: AC power lost and UPS battery at ${bat_capacity}% (<= ${THRESHOLD}%). System shutting down now." || true
+    exec /usr/bin/systemctl poweroff
+  else
+    log_msg "daemon.warning" "AC offline, battery Discharging at ${bat_capacity}% (> ${THRESHOLD}% threshold)."
+  fi
+elif [[ "${DRY_RUN}" == "true" ]]; then
+  echo "[DRY-RUN] OK: ac_online=${ac_online}, status=${bat_status}, capacity=${bat_capacity}%, threshold=${THRESHOLD}%."
+fi

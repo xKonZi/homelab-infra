@@ -20,6 +20,9 @@
     - role: base
       tags:
         - base
+    - role: power
+      tags:
+        - power
     - role: storage
       tags:
         - storage
