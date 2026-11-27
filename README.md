@@ -10,7 +10,7 @@ Projekt stanowi fundament infrastruktury **Etapów W0–W1** pod lekkie usługi 
 
 - **Serwer:** Lenovo G580 — Intel Core i7-3720QM (4C/8T), 8 GB DDR3 (`2x 4 GB`), **250 GB SATA SSD** (docelowy `1 TB HDD` dojdzie później w zatoce caddy jako osobny punkt montowania `/mnt/hdd`), karta Wi-Fi Intel Centrino Advanced-N 6205, wyłączona NVIDIA GT 710M.
 - **Sieć:** wyłącznie Wi-Fi, brak przekierowania portów i statycznego DHCP na routerze -> pełna komunikacja prywatna przez **Tailscale (`MagicDNS`)**.
-- **Zasilanie:** w trakcie konfiguracji nowej baterii w roli UPS (podtrzymanie przy zaniku zasilania oraz bezpieczne wyłączanie poniżej progu). Brak LUKS na dysku oraz brak automatycznych restartów po aktualizacjach minimalizują ryzyko zablokowanego startu po zaniku zasilania.
+- **Zasilanie:** nowa bateria skonfigurowana jako UPS (tryb ochrony ogniw `conservation_mode`, bezpieczne wyłączanie systemu przy `<= 20%` na baterii, komenda diagnostyczna `power-status`). Brak LUKS na dysku oraz brak automatycznych restartów po aktualizacjach minimalizują ryzyko zablokowanego startu po zaniku zasilania.
 
 ---
 
@@ -21,6 +21,7 @@ Projekt stanowi fundament infrastruktury **Etapów W0–W1** pod lekkie usługi 
 | **System bazowy** | Ubuntu Server 24.04 LTS (`g580`, użytkownik `konzi`, strefa `Europe/Warsaw`) |
 | **Dyski (SSD 250 GB)** | LVM bez LUKS (`ubuntu-vg`): `60G` `/` (instalator), `50G` `/var/lib/docker`, `60G` `/srv`, ~`50G` rezerwy w VG |
 | **Laptop jako serwer** | Zamknięta klapa ignorowana (`systemd-logind`), `consoleblank=60`, `iwlwifi power_save=0`, `thermald`, `zram` (`min(ram / 2, 4096)`, `zstd`) |
+| **Zasilanie / UPS** | Trwały `conservation_mode` (`ideapad_acpi` przez `systemd-tmpfiles`), strażnik `battery-ups-guard.timer` (`systemctl poweroff` przy `<= 20%` na baterii), komenda `power-status` |
 | **Sieć i hardening** | **Zero Trust po Wi-Fi:** UFW `deny incoming` w LAN, utwardzone OpenSSH (`00-hardening.conf`, tylko klucze, bez roota, `AllowTcpForwarding local` pod *Connect over SSH*) wyłącznie na `tailscale0` |
 | **Aktualizacje** | `unattended-upgrades` dla łatek bezpieczeństwa, **bez** automatycznego rebootu |
 | **Kontenery** | Oficjalne repo Docker CE + `docker-compose-plugin`, rotacja logów (`10m` x 3), `live-restore: true` |
@@ -55,6 +56,7 @@ homelab-infra/
 │   │   └── site.yml                     # Faza 2 i utrzymanie (po Tailscale): pełny stan + hardening + Docker + agent_host + backup
 │   └── roles/
 │       ├── base/
+│       ├── power/
 │       ├── storage/
 │       ├── tailscale/
 │       ├── security/
